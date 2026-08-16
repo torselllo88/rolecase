@@ -9,7 +9,17 @@ const projectRoot = path.resolve(
   ".."
 );
 
-loadDotenv({ path: path.join(projectRoot, ".env"), quiet: true });
+// Vitest sets process.env.VITEST = "true" for every test run — skip loading
+// the real .env entirely under test, so the test suite's hermeticity never
+// depends on a manually-maintained list of which secret vars to blank (a
+// list that silently goes stale the next time a new LLM_MODEL_*/AZURE_* var
+// is added below: a test relying on OpenRouter being "unconfigured" passed
+// on a developer's own machine only because their .env happened to set
+// LLM_MODEL_DEFAULT, and failed on any truly clean machine — CI included —
+// where no .env exists at all).
+if (!process.env.VITEST) {
+  loadDotenv({ path: path.join(projectRoot, ".env"), quiet: true });
+}
 
 function parseIntEnv(value: string | undefined, fallback: number): number {
   const parsed = value ? Number.parseInt(value, 10) : NaN;

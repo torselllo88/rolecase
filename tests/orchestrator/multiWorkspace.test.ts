@@ -177,7 +177,15 @@ describe("Orchestrator — multi-workspace behavior", () => {
 
     it("with no llmFallbackSettings option, returns the Orchestrator's own settings unchanged", () => {
       const orchestrator = new Orchestrator(db);
-      orchestrator.updateSettings({ llmProvider: "openrouter", openRouterApiKey: "own-key" });
+      // updateSettings() validates the full config (apiKey AND model) before persisting
+      // — openRouterModel must be set here too, not just the key, or this throws
+      // regardless of what's under test (previously masked by a real LLM_MODEL_DEFAULT
+      // leaking in from a developer's own .env — see env.ts's VITEST guard).
+      orchestrator.updateSettings({
+        llmProvider: "openrouter",
+        openRouterApiKey: "own-key",
+        openRouterModel: "own-model",
+      });
 
       const resolved = resolve(orchestrator);
       expect(resolved.llmProvider).toBe("openrouter");

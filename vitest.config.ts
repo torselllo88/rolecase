@@ -6,21 +6,12 @@ export default defineConfig({
     env: {
       // Redirects fileStore's on-disk artifacts to a throwaway directory so
       // running tests never writes into the real data/runs/ used by the CLI.
+      // The actual secret-hermeticity guarantee (every agent/tool forced onto
+      // its deterministic stub path, regardless of what's in a developer's
+      // real .env) lives in config/env.ts itself now — it skips loading .env
+      // entirely whenever process.env.VITEST is set, rather than requiring a
+      // manually-maintained list of every secret var name here.
       DATA_DIR: path.resolve(process.cwd(), ".vitest-data"),
-      // dotenv (config/env.ts) never overrides a key that already exists in
-      // process.env, even if empty — setting these here BEFORE the real .env
-      // loads forces every agent/tool onto its deterministic stub path during
-      // tests, regardless of what real credentials happen to be in .env.
-      // Without this, tests silently make real network calls (and burn real
-      // API quota) whenever a developer has configured Azure/Brave locally.
-      BRAVE_SEARCH_API_KEY: "",
-      LLM_PROVIDER: "",
-      OPENROUTER_API_KEY: "",
-      AZURE_OPENAI_API_KEY: "",
-      AZURE_OPENAI_ENDPOINT: "",
-      AZURE_OPENAI_API_VERSION: "",
-      AZURE_OPENAI_DEPLOYMENT: "",
-      AZURE_OPENAI_DEPLOYMENT_LARGE: "",
     },
     server: {
       // node:sqlite is still experimental and isn't in Node's public
