@@ -1,0 +1,32 @@
+node_modules/
+dist/
+.vitest-data/
+
+data/db/*.sqlite3*
+data/runs/*/
+!data/runs/.gitkeep
+
+# Per-workbench data (its own resumes/examples/run history/db) — this is other
+# people's content, not yours, and it's runtime state regardless, same tier as
+# data/db and data/runs above.
+data/workspaces/
+
+# Personal/sensitive — keep the folder + README, gitignore the actual content.
+# The two !-negations are load-bearing: data/resumes/ never needed one since
+# its pattern only matches *.pdf (README.md was never at risk), but *.md here
+# would otherwise wipe out data/cover-letters/README.md and
+# data/answer-examples/README.md right along with everyone's real content.
+data/resumes/*.pdf
+data/resumes/.cache/
+data/cover-letters/*.md
+data/cover-letters/*.txt
+!data/cover-letters/README.md
+data/answer-examples/*.md
+data/answer-examples/*.txt
+!data/answer-examples/README.md
+data/candidate-notes/*.md
+data/candidate-notes/*.txt
+!data/candidate-notes/README.md
+
+.env
+*.log

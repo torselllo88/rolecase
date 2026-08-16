@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sign in</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div style="max-width:360px;margin:15vh auto;padding:0 16px;">
+  <p style="text-align:center;font-weight:600;margin-bottom:16px;">◆ RoleCase</p>
+  <div class="card">
+    <h1 style="margin-top:0">__LOGIN_HEADING_PLACEHOLDER__</h1>
+    <p class="field-label" id="login-error" style="display:none;color:var(--bad)"></p>
+    <form id="login-form" method="post">
+      <input type="password" id="login-password" name="password" placeholder="Password" autofocus autocomplete="current-password" style="width:100%;margin-bottom:12px;">
+      <button type="submit" class="primary" id="login-submit" style="width:100%">Sign in</button>
+    </form>
+  </div>
+</div>
+<noscript><p style="text-align:center;color:var(--bad)">This page requires JavaScript to sign in.</p></noscript>
+<script>
+  const form = document.getElementById("login-form");
+  const errorEl = document.getElementById("login-error");
+  const submitBtn = document.getElementById("login-submit");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.style.display = "none";
+    const password = document.getElementById("login-password").value;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Signing in…";
+    try {
+      const res = await fetch("__LOGIN_ACTION_PLACEHOLDER__", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        errorEl.textContent = body.error || "Sign in failed.";
+        errorEl.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Sign in";
+        return;
+      }
+      window.location.href = "__WORKSPACE_ROOT_PLACEHOLDER__";
+    } catch {
+      errorEl.textContent = "Sign in failed — network error.";
+      errorEl.style.display = "block";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign in";
+    }
+  });
+</script>
+</body>
+</html>
