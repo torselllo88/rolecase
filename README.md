@@ -36,17 +36,28 @@ without your explicit approval.
 
 ![RoleCase — dashboard](docs/screenshots/dashboard.png)
 
-![Role assessment](docs/screenshots/role-assessment.png)
-*Role assessment — fit score, recommendation, and reasoning, before any drafting happens.*
-
-![Application workspace](docs/screenshots/workspace.png)
-*Application workspace — vacancy report, application package, and full execution trace.*
-
-![Drafting](docs/screenshots/drafting.png)
-*Drafting — cover letter and application answers, with the per-piece regenerate control.*
-
-![Workbenches (optional)](docs/screenshots/workbenches.png)
-*Admin → Workbenches — optional, for multi-tenant deployments.*
+<table>
+<tr>
+<td align="center" width="50%">
+<a href="docs/screenshots/role-assessment.png"><img src="docs/screenshots/role-assessment.png" width="380" alt="Role assessment"></a>
+<br><sub>Role assessment — fit score, recommendation, and reasoning</sub>
+</td>
+<td align="center" width="50%">
+<a href="docs/screenshots/workspace.png"><img src="docs/screenshots/workspace.png" width="380" alt="Application workspace"></a>
+<br><sub>Application workspace — report, package, and execution trace</sub>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+<a href="docs/screenshots/drafting.png"><img src="docs/screenshots/drafting.png" width="380" alt="Drafting"></a>
+<br><sub>Drafting — cover letter and answers, with the per-piece regenerate control</sub>
+</td>
+<td align="center" width="50%">
+<a href="docs/screenshots/workbenches.png"><img src="docs/screenshots/workbenches.png" width="380" alt="Workbenches (optional)"></a>
+<br><sub>Workbenches (optional) — admin-managed multi-tenant workspaces</sub>
+</td>
+</tr>
+</table>
 
 ## Why RoleCase
 
