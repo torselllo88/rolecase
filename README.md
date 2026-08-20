@@ -5,6 +5,8 @@
 
 An AI assistant for evaluating job opportunities and drafting tailored applications, with human approval at every step.
 
+**[Live demo →](https://rolecase-production.up.railway.app/demo)** — no signup, runs on stub LLM/search (no real API calls, no cost).
+
 ## Table of contents
 
 - [What it is](#what-it-is)
@@ -253,6 +255,16 @@ number of admin-managed "workbenches" for other people, each with fully isolated
 data, settings, and (optionally) their own LLM key. Off by default: with no
 `ADMIN_PASSWORD`, this is a single unauthenticated instance, exactly as if the
 feature didn't exist.
+
+**Demo vs. workbenches** — these solve different problems, not the same one.
+The public demo (`ENABLE_DEMO=true`) is intentionally passwordless — it's a
+no-signup try-it space, and it's always forced onto stub LLM/search regardless
+of any real key configured elsewhere. Workbenches always require a password —
+they're for named individuals, not public access, and there's no setting that
+makes one passwordless. With demo enabled, `/` redirects there automatically,
+*not* to `/admin` — the admin panel is only reachable by navigating to
+`/admin` directly (its own login page); the demo UI deliberately shows no link
+to it.
 
 **What's local, what's not** — everything lives under `./data/` (override with
 `DATA_DIR`): a SQLite file for run state/settings, and plain files for generated
