@@ -77,7 +77,10 @@ import {
  */
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-const PORT = Number(process.env.GUI_PORT ?? 3939);
+/** PORT is the convention most PaaS platforms (Railway, Render, Heroku, ...) inject and route to — it wins over the local-dev-only GUI_PORT when both are set. */
+const PORT = Number(process.env.PORT ?? process.env.GUI_PORT ?? 3939);
+/** Loopback by default — a plain `npm start` on your own machine should never be reachable from the network. Deploying behind a platform's own edge proxy (Railway, Render, ...) or your own reverse proxy requires opting in with GUI_HOST=0.0.0.0. */
+const HOST = process.env.GUI_HOST ?? "127.0.0.1";
 
 /** Thrown by readJsonBody()/route parsing for a client-caused request problem — errorStatusAndMessage() maps it straight to its own status code instead of a generic 500. */
 class HttpError extends Error {
@@ -1477,12 +1480,14 @@ const server = http.createServer((req, res) => {
   })();
 });
 
-// Deliberately localhost-only, even with workspaces enabled — a reverse
-// proxy in front decides what's actually reachable from the internet (see
-// the README's demo-deployment section); this process itself never listens
-// on anything but loopback.
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`RoleCase GUI running at http://localhost:${PORT}`);
+// Loopback by default, even with workspaces enabled — a fronting proxy (your
+// own, or a PaaS's) decides what's actually reachable from the internet.
+// Binding wider requires an explicit GUI_HOST=0.0.0.0 (see .env.example).
+server.listen(PORT, HOST, () => {
+  console.log(`RoleCase GUI running at http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
+  if (HOST === "0.0.0.0") {
+    console.log("Bound to 0.0.0.0 — reachable from outside this machine. Make sure that's intended.");
+  }
   // The rate limiters (demo actions, login attempts) trust env.trustedClientIpHeader
   // over the raw socket address — correct only if a fronting reverse proxy actually
   // SETS that header (overwriting any client-supplied value) rather than appending
