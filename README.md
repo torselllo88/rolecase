@@ -1,217 +1,328 @@
 # RoleCase
 
-<!-- Replace OWNER/REPO once this is pushed to GitHub. -->
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/torselllo88/rolecase/actions/workflows/ci.yml/badge.svg)](https://github.com/torselllo88/rolecase/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-An AI assistant for evaluating job opportunities and drafting tailored applications,
-with human approval at every step. A multi-agent system that analyzes a job vacancy
-and, after human approval, drafts a full application package. See `README.txt` for
-the original design brief. This file covers setting the project up on a machine —
-including a fresh one.
+An AI assistant for evaluating job opportunities and drafting tailored applications, with human approval at every step.
 
-Not affiliated with or endorsed by OpenAI, Anthropic, OpenRouter, or Brave Search —
-this project is an independent client of their public APIs, referenced here only to
-describe what it connects to.
+## Table of contents
 
-## Setup on a fresh machine
+- [What it is](#what-it-is)
+- [Why RoleCase](#why-rolecase)
+- [How it works](#how-it-works)
+- [Key capabilities](#key-capabilities)
+- [Screenshots](#screenshots)
+- [Architecture](#architecture)
+- [Design decisions](#design-decisions)
+- [Tech stack](#tech-stack)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Security notes](#security-notes)
+- [Illustrative example](#illustrative-example)
+- [Limitations](#limitations)
 
-The fastest path — unpack, then one command:
+## What it is
+
+RoleCase turns a job posting into a structured application workflow. It evaluates
+role fit, researches the company, recommends whether to apply, then prepares
+tailored application materials using a profile you provide — your resumes, past
+cover letters, and past answers. It's designed as a decision-support tool, not an
+autonomous application bot: nothing is generated, and nothing is submitted,
+without your explicit approval.
+
+## Screenshots
+
+<!-- Add real screenshots to docs/screenshots/ — see docs/screenshots/README.md for expected filenames. -->
+
+![RoleCase — dashboard](docs/screenshots/dashboard.png)
+
+![Role assessment](docs/screenshots/role-assessment.png)
+*Role assessment — fit score, recommendation, and reasoning, before any drafting happens.*
+
+![Application workspace](docs/screenshots/workspace.png)
+*Application workspace — vacancy report, application package, and full execution trace.*
+
+![Drafting](docs/screenshots/drafting.png)
+*Drafting — cover letter and application answers, with the per-piece regenerate control.*
+
+![Workbenches (optional)](docs/screenshots/workbenches.png)
+*Admin → Workbenches — optional, for multi-tenant deployments.*
+
+## Why RoleCase
+
+Most "AI job application" tools skip straight to generation. Three problems with that:
+
+- **Generic LLMs produce plausible but weakly grounded text.** Asked to write a
+  cover letter, a model will confidently invent achievements, numbers, and
+  experience that aren't in your background if it isn't given anything real to
+  ground itself in.
+- **A useful recommendation needs context about both the role and the
+  candidate** — not just the vacancy text, and not just a resume in isolation, but
+  how the two actually match.
+- **Automated submission removes the one decision point that matters most**:
+  whether this specific application is worth sending at all.
+
+RoleCase is built around these constraints rather than despite them. Analysis is
+a separate stage from writing — the system tells you whether a role looks worth
+pursuing *before* spending any effort drafting materials for it — and every
+transition between stages waits for an explicit approval. A dedicated Evidence
+Checker agent cross-references every claim in the generated text against your
+actual resume, flagging anything that isn't backed by something real.
+
+## How it works
 
 ```
+Job URL / description
+  → Role analysis
+  → Company research
+  → Fit assessment
+  → Human decision (approve / reject)
+  → Application planning (resume selection)
+  → Drafting (cover letter + answers)
+  → Critique / revision (writer–critic loop)
+  → Human review (accept / regenerate / mark as applied)
+```
+
+RoleCase never submits an application on your behalf. The final step is always a
+manual "mark as applied" — there is no browser automation, no auto-submit.
+
+## Key capabilities
+
+- **Job & company analysis** — parses the posting and researches the company
+  (culture signals, risks, salary range) via live web search.
+- **Candidate–role fit assessment** — a scored recommendation (apply / apply with
+  caution / reject) with reasoning, before any application material is drafted.
+- **Resume selection** — picks the best-matching resume from your own library of
+  variants for each specific role.
+- **Tailored cover letter & application-question drafting** — grounded in your
+  resume, past cover letters, and past answers, not generic filler.
+- **Iterative writer/critic loop** — a second agent reviews every draft for weak
+  arguments, unsupported claims, and ATS issues, and sends it back for revision
+  until it clears a quality bar (or hits a configurable iteration cap).
+- **Full execution traceability** — every run keeps a complete trace of every
+  agent call, tool call, and model call, with token usage, cost, and duration.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    Browser["Browser\nvanilla-JS SPA"] -->|JSON| API["HTTP API\nNode http, no framework"]
+    API --> Orchestrator["Orchestrator\nstage state machine"]
+
+    subgraph ANALYSIS["Analysis agents"]
+        VA["Vacancy Analyzer"]
+        CR["Company Research"]
+    end
+
+    subgraph GENERATION["Generation agents"]
+        RS["Resume Selector"]
+        subgraph LOOP["Writer ↔ Critic loop"]
+            direction LR
+            WR["Writer"]
+            CRIT["Critic"]
+        end
+    end
+
+    EC["Evidence Checker"]
+
+    Orchestrator --> VA
+    Orchestrator --> CR
+    Orchestrator --> RS
+    Orchestrator --> WR
+    Orchestrator --> CRIT
+    Orchestrator --> EC
+
+    ANALYSIS --> Models[["LLM provider\nOpenRouter · Azure OpenAI · stub"]]
+    GENERATION --> Models
+    EC --> Models
+    CR --> Search[["Search Broker\nBrave Search · stub"]]
+    Orchestrator --> Data[("SQLite + filesystem")]
+```
+
+- **UI** — a small vanilla-JS single-page app (no framework, no build step),
+  talking to the backend over plain JSON endpoints.
+- **API / HTTP layer** — a lightweight router over Node's built-in `http` module,
+  kept intentionally small rather than pulled in via a framework: handles auth,
+  workspace routing, and request validation with no middleware-chain indirection
+  to reason about, and one fewer dependency to audit and patch.
+- **Orchestrator** — the state machine driving each application through its
+  stages; the only component that wires agents together (agents never call each
+  other directly).
+- **Agents / workflows** — six single-responsibility agents: Vacancy Analyzer,
+  Company Research, Resume Selector, Writer, Critic, Evidence Checker.
+- **Model abstraction** — a small provider interface with OpenRouter and Azure
+  OpenAI implementations; every agent goes through it, and every agent falls back
+  to a deterministic stub when no provider is configured.
+- **External research / search** — a centralized Search Broker (Brave Search),
+  with caching, rate limiting, and the same stub fallback.
+- **Persistence / configuration** — SQLite for run state and settings; the
+  filesystem for generated artifacts (reports, packages, execution traces) and
+  profile data (resumes, cover letters, answer examples, notes).
+
+RoleCase uses a staged workflow rather than a fully autonomous agent. Each stage
+has a constrained responsibility and produces structured output consumed by the
+next stage — there's no single agent loop deciding what to do next; the
+orchestrator does, deterministically.
+
+## Design decisions
+
+**Human-in-the-loop by design.** Every stage transition — approve the analysis,
+accept the package, mark as applied — is a manual action. There's no "auto-apply"
+mode, and adding one isn't a goal.
+
+**Analysis is separate from generation.** Drafting a full application package is
+the most expensive step (multiple LLM calls, iterative revision). The system
+decides whether a role is worth pursuing first, and only spends that effort after
+you approve — instead of generating full materials for every posting up front.
+
+**Structured candidate context, not a giant prompt.** Resume text, past cover
+letters, past answers, and free-form notes are each their own labeled input to
+the Writer agent, rather than one undifferentiated blob of "here's everything
+about the candidate." The same structure lets the Evidence Checker verify
+specific claims against a specific source.
+
+**Writer–critic loop with progressive locking.** The Critic checks each piece
+independently for weak arguments, unsupported claims, and length; anything that
+already passed is locked and excluded from further review, so later iterations
+only spend effort on pieces that still need work — capped at a configurable
+number of rounds.
+
+**Model/provider abstraction.** OpenRouter and Azure OpenAI are both first-class,
+swappable per deployment and per agent — the system isn't wired to one vendor,
+and degrades to a deterministic stub rather than failing outright when nothing is
+configured.
+
+**Multi-tenant workspace isolation.** Admin, a public demo, and any number of
+password-gated workbenches for other people run in the same process but never
+share data, LLM keys, or search results — enforced via per-request context
+propagation, not convention.
+
+**Cost governance as a first-class setting.** The refinement loop's iteration
+cap, which LLM model each agent uses, and how many expensive actions a workspace
+may trigger per hour are all configurable per workspace — added directly in
+response to a real gap: a workbench's owner had no way to control what they were
+spending.
+
+## Tech stack
+
+TypeScript · Node.js (no framework, no build step) · OpenRouter / Azure OpenAI ·
+Brave Search · SQLite · Vitest · Model Context Protocol (MCP) SDK
+
+## Getting started
+
+```
+git clone https://github.com/torselllo88/rolecase.git
+cd rolecase
 npm start
 ```
 
-This installs dependencies and launches the GUI at `http://localhost:3939`, all in
-one step (`npm run setup && npm run gui` — see `package.json`). It works with **zero
-configuration**: without a `.env`, every agent falls back to a deterministic stub (no
-crash, no real API calls), so you get a fully working, click-through demo
-immediately. Fill in `.env` (step 4 below) whenever you're ready for real LLM calls —
-or skip `.env` entirely and set your provider/key from the GUI itself, in
-Admin → Settings (see "Customization" below).
+That's it for a first look — `npm start` installs dependencies and launches the
+GUI at `http://localhost:3939`. It works with **zero configuration**: without a
+`.env`, every agent falls back to a deterministic stub (no crash, no real API
+calls), so you get a fully working, click-through demo immediately.
+
+**Prerequisites**: [Node.js](https://nodejs.org/) ≥ 22.5.0.
+
+**For real LLM calls**, copy `.env.example` to `.env` and fill in an OpenRouter or
+Azure OpenAI key — or skip `.env` entirely and set a provider/key from the GUI
+itself, in Admin → Settings.
 
 Longer version, if you want to run steps individually or use the CLI instead:
 
-1. Install [Node.js](https://nodejs.org/) ≥ 22.5.0.
-2. Clone or unzip this project folder anywhere — nothing here depends on a fixed
-   install path.
-3. Run the setup command:
-   ```
-   npm run setup
-   ```
-   Today this is just `npm install` — kept as its own script (rather than telling
-   you to run `npm install` directly) so step 6 below and `npm start` never need to
-   change if a future dependency ever needs a real setup step again.
-4. Copy `.env.example` to `.env` and fill in your real API keys. **Never commit or
-   zip up a populated `.env`** — it's already gitignored, and no script in this
-   project ever bundles it into an archive for you.
-5. Run `npm test` to confirm a clean install. The test suite is fully hermetic (it
-   blanks all secret env vars before running), so it passes with no keys configured
-   at all.
-6. Use it:
+1. `npm run setup` (currently just `npm install`).
+2. Copy `.env.example` → `.env` if you want real LLM/search calls; fill in keys.
+   **Never commit a populated `.env`** — it's gitignored on purpose.
+3. `npm test` to confirm a clean install — the suite is fully hermetic (it never
+   touches your real `.env`), so it passes with zero keys configured.
+4. Use it:
+   - `npm run gui` — the web GUI (the primary way to use this day to day).
    - `npm run cli` — command-line interface.
-   - `npm run gui` — local web GUI at `http://localhost:3939` (the primary way to
-     use this day to day).
-   - `npm run mcp` — MCP server exposing the same tools to any MCP-compatible client.
+   - `npm run mcp` — an MCP server exposing the same tools to any MCP-compatible client.
 
-`npm run build` (a `tsc` type-check) is a development-time gate, not required for any
-of the above — the CLI/GUI/MCP entry points all run directly against TypeScript
-source via `tsx`. For this project, "build" *is* `npm run setup`.
+## Configuration
 
-## Multi-workspace mode: Admin / Demo / Workbenches
+**Your profile** (resumes, writing style, past answers, other background) —
+manage from **Admin** in the GUI (upload/add/edit/delete, no file editing
+needed), or drop files by hand into `data/resumes/`, `data/cover-letters/`,
+`data/answer-examples/`, `data/candidate-notes/` — each folder has its own
+`README.md` explaining the expected format. All four are optional and gitignored;
+your content never leaves your machine unless you configure a real LLM/search
+provider.
 
-Everything above describes the default: one shared instance at `/`, no login
-— exactly as if this section didn't exist. Setting `ADMIN_PASSWORD` in `.env`
-switches the same process to path-prefixed routing instead:
+**LLM & search providers** — set OpenRouter and/or Azure OpenAI, and a Brave
+Search key, either in `.env` (see `.env.example`) or from Admin → Settings (a
+value set in the GUI wins over `.env`). Leave everything unset and the whole
+system runs on deterministic stubs — no crash, no real calls, no cost.
 
-- **`/admin`** — the same data (`data/`) you were already using, now
-  password-gated so it can be reached remotely. Nothing about your
-  resumes/runs/settings changes.
-- **`/demo`** (optional — also needs `ENABLE_DEMO=true`, its own independent
-  flag) — public, no login. LLM calls and company/salary search are always
-  stubbed here regardless of any real key configured elsewhere, so a public
-  visitor can never trigger a real (costly) call. A visitor can paste their
-  own resume for a more grounded result — used for that one application
-  only, never written to the shared Resume Library, never visible to anyone
-  else. Runs older than `DEMO_RUN_TTL_HOURS` are swept away automatically.
-- **`/workbench/<slug>`** (optional, any number of them) — for friends: each
-  is created from Admin → Workbenches (name + password), with its own
-  independent resumes/answer examples/cover letters/candidate notes/run
-  history/generation defaults, stored under `data/workspaces/` (gitignored —
-  this is other people's content, not yours). A workbench with no
-  OpenRouter/Azure key of its own falls back to the admin's key, then to
-  `.env` — set one explicitly in that workbench's own Admin → Settings only
-  if you want it to use a different key/model.
+**Multi-workspace mode** — set `ADMIN_PASSWORD` in `.env` to password-gate the
+admin panel and unlock an optional public demo (`ENABLE_DEMO=true`) and any
+number of admin-managed "workbenches" for other people, each with fully isolated
+data, settings, and (optionally) their own LLM key. Off by default: with no
+`ADMIN_PASSWORD`, this is a single unauthenticated instance, exactly as if the
+feature didn't exist.
 
-This is meant to be reached over an SSH tunnel by default
-(`ssh -L 3939:localhost:3939 you@host`, then browse `http://localhost:3939/admin`
-as normal) rather than exposed publicly — the process itself only ever binds
-`127.0.0.1`. If you do put a reverse proxy in front of it, set
-`TRUSTED_CLIENT_IP_HEADER` to whatever header that proxy actually *sets* (not
-appends to) with the real visitor's address (e.g. nginx's
-`proxy_set_header X-Real-IP $remote_addr;`) — otherwise the login/demo rate
-limiters below all see the proxy's own address instead of the real visitor's,
-and either block everyone as one "IP" or block no one. Set
-`COOKIE_SECURE=true` once that proxy terminates TLS for you.
+**What's local, what's not** — everything lives under `./data/` (override with
+`DATA_DIR`): a SQLite file for run state/settings, and plain files for generated
+reports/packages/traces and your profile content. Nothing is sent anywhere except
+to whichever LLM/search provider you've configured.
 
-Related `.env` vars (see `.env.example` for defaults): `ADMIN_PASSWORD`,
-`ENABLE_DEMO`, `DEMO_RUN_TTL_HOURS`, `DEMO_RATE_LIMIT_PER_HOUR`,
-`LOGIN_RATE_LIMIT_PER_HOUR`, `TRUSTED_CLIENT_IP_HEADER`, `COOKIE_SECURE`.
+## Security notes
 
-## Moving to another machine
+- **API keys are stored in plaintext** in the local SQLite settings database,
+  whether set via `.env` or the Admin/Workbench Settings UI. That's fine as
+  long as `data/` stays on your machine — it's gitignored by default — but
+  don't commit, publish, or share that file.
+- **Legacy mode (no `ADMIN_PASSWORD` set) has no rate limiting** on expensive
+  actions like analysis and drafting — it's built assuming a single trusted
+  local user. If you expose it beyond `localhost`, that assumption no longer
+  holds.
+- **The session cookie isn't marked `Secure` unless you set
+  `COOKIE_SECURE=true`.** That's correct for local HTTP use. If you run
+  multi-workspace mode (admin/demo/workbenches) behind a real domain, set
+  `COOKIE_SECURE=true` and put TLS in front of it — otherwise the session
+  cookie travels unencrypted.
+- A handful of transitive, dev-only `npm audit` findings (via Vitest 3) are
+  currently unaddressed pending a Vitest 4 upgrade; they affect the test
+  toolchain only, not the running application.
 
-Treat the portable unit as the source tree only — regenerate everything else on the
-new machine rather than copying it:
+## Illustrative example
 
-- **Don't bring**: `node_modules/`, `dist/`, `data/db/*.sqlite3*`. All regenerate
-  (`npm run setup` / first run / `npm run build`), and `node_modules` in particular
-  may not even work copied as-is across machines.
-- **Copy manually if you want continuity** (never via git — none of this is tracked):
-  `.env`, `data/resumes/`, `data/cover-letters/`, `data/answer-examples/`,
-  `data/candidate-notes/`, and, only if you want existing run history,
-  `data/db/app.sqlite3` (+ its `-wal`/`-shm` files) and `data/runs/`. Running
-  workbenches (see "Multi-workspace mode" above)? Their data lives under
-  `data/workspaces/` — copy that too if you want continuity for them.
+*A synthetic walkthrough for illustration — not a real run or real candidate data.*
 
-**`scripts/pack-for-transfer.sh`** builds the archive for you, with the above baked
-in — it never deletes or modifies anything on this machine, it just leaves the
-regenerable/run-specific paths out of the `.tar.gz` it writes:
+**Input**: "Senior Technical Product Manager, AI/ML" posting, pasted as raw text.
 
-```
-scripts/pack-for-transfer.sh                    # keeps your resumes/cover letters/answer examples/candidate notes
-scripts/pack-for-transfer.sh --strip-personal   # also leaves those out (a clean, no-personal-data template)
-scripts/pack-for-transfer.sh --strip-personal /path/to/output/dir   # optional: where to write the archive
-```
+**Analysis**: fit score 82/100 → **APPLY** → approved.
 
-Always excluded, regardless of flags: `node_modules/`, `dist/`, `.vitest-data/`,
-`data/db/*.sqlite3*`, `data/runs/`, `data/workspaces/` (workbench data — other
-people's content), and `.env` (this project never bundles secrets into an archive
-for you — copy `.env` by hand if you want the new machine to have your real API
-keys). Without `--strip-personal`, `data/resumes/`, `data/cover-letters/`,
-`data/answer-examples/`, and `data/candidate-notes/` are included, for continuity.
-Without an explicit output path, the archive is written one level above the
-project folder (never inside it).
+**After approval**: resume selector picks the best-matching variant on file. The
+writer/critic loop drafts a cover letter and two application answers, revising
+once after the Critic flags generic phrasing. The Evidence Checker catches one
+unsupported claim ("led a team of 12" — not in the resume) before the piece is
+marked converged.
 
-## Customization: what to edit, and where
+**Output**: cover letter, two application answers, an evidence map, and a full
+execution trace — ready for a final human read before marking the application as
+submitted.
 
-Everything you'd plausibly want to change on a new machine, in one place:
+## Limitations
 
-**Your profile (resume, writing style, past answers, other background)** — manage
-all four from **Admin** in the GUI (upload/add/edit/delete, no file editing needed),
-or drop files into the folders below by hand if you're CLI-only:
-- `data/resumes/` — PDF resumes, one file per variant. See `data/resumes/README.md`.
-- `data/cover-letters/` — past cover letters, for style/voice grounding. See
-  `data/cover-letters/README.md`.
-- `data/answer-examples/` — past application-question answers, for grounding. See
-  `data/answer-examples/README.md`.
-- `data/candidate-notes/` — free-form background info about you or your projects
-  that doesn't fit as a resume or a Q&A pair (e.g. an open-source project not on
-  your resume) — additional grounding for the Writer and Evidence Checker, and for
-  the initial fit-scoring analysis. See `data/candidate-notes/README.md`.
+- Quality depends heavily on how complete your candidate profile is — a thin
+  resume with no past answers on file means thinner grounding for the Writer.
+- Company research depends on public information available via web search; it
+  can miss recent news or be wrong about a small/private company.
+- Recommendations are advisory, not authoritative — the fit score and
+  apply/reject verdict are a starting point for your own judgment, not a
+  substitute for it.
+- LLM output still requires review. The Critic and Evidence Checker catch a lot,
+  not everything.
+- There is no automated submission — every application is submitted by you,
+  manually, outside this tool.
+- This isn't built to maximize application volume; the explicit approval gates
+  make that a deliberately bad fit for spray-and-pray applying.
 
-All four are optional (an empty folder just means less grounding — the app still
-works) and are gitignored on purpose: only the folder structure and its README are
-tracked, so your personal content never ends up in git or in an archive you didn't
-build yourself.
+Not affiliated with or endorsed by OpenAI, Anthropic, OpenRouter, or Brave
+Search — this project is an independent client of their public APIs, referenced
+here only to describe what it connects to.
 
-**Admin panel** (GUI only, no CLI equivalent yet) — the sidebar's Admin section
-covers everything above plus generation defaults, LLM provider/keys, and (in the
-actual admin workspace) Workbenches — see "Multi-workspace mode" above:
-Resumes, Answer examples, Cover letters, Candidate notes, and Settings (default
-word limits, default cover-letter/humanize-style/avoid-overfitting toggles, agent
-instructions, and OpenRouter/Azure provider selection — an alternative to editing
-`.env`, stored in the SQLite DB and applied immediately without a restart).
+## License
 
-**Agent prompts** — two ways to adjust agent behavior, from lightest to heaviest:
-- **Admin → Settings → "Agent instructions (advanced)"** — a free-text note per
-  agent, appended to the end of that agent's own system prompt (additive only,
-  never a full replacement — the agent's structured-output contract stays intact
-  either way). Takes effect on the next run, no restart. Good for tone/scope
-  nudges ("keep answers under 3 sentences unless asked for more"); keep it short
-  and behavioral, not a request to change the response format.
-- **Edit the source directly** — for anything beyond an additive nudge. These are
-  TypeScript string constants, not separate config files, so editing one means
-  editing source and (if you're running via `tsx`, the default) the change takes
-  effect on the next run with no rebuild step:
-  - `src/agents/vacancyAnalyzerAgent.ts` — `PARSE_ONLY_SYSTEM_PROMPT` /
-    `PARSE_AND_FIT_SYSTEM_PROMPT` (vacancy parsing + fit scoring).
-  - `src/agents/companyResearchAgent.ts` — `SYNTHESIS_SYSTEM_PROMPT`.
-  - `src/agents/resumeSelectorAgent.ts` — `SYSTEM_PROMPT`.
-  - `src/agents/writerAgent.ts` — `BODY_INSTRUCTIONS` (folded into a per-call
-    system prompt built by `buildSystemPrompt()`).
-  - `src/agents/criticAgent.ts` — `SYSTEM_PROMPT`.
-  - `src/agents/evidenceCheckerAgent.ts` — `SYSTEM_PROMPT`.
-  - `src/tools/resumeLibrary.ts` — `NORMALIZE_SYSTEM_PROMPT` (the one-time
-    PDF-text cleanup pass, not an "agent" but still an LLM call).
-
-**Settings** — the app-wide defaults (Writer length limits, default cover-letter/
-humanize-style/avoid-overfitting toggles, per-agent instructions, LLM provider/keys,
-and the Brave Search key) can be set either from Admin → Settings in the GUI (stored
-in `data/db/app.sqlite3`, takes effect immediately) or in `.env` (copy from
-`.env.example`) — a value set in the GUI wins over `.env` when both are present.
-The Brave Search key is a separate credential from the LLM keys, used only by
-Company Research's web search — set it too, or company/salary research always
-falls back to a deterministic stub regardless of whether an LLM is configured.
-"Avoid overfitting" asks the Writer/
-Critic not to over-mirror a vacancy posting's exact wording back at it — a separate
-toggle from "humanize style" (which targets AI-writing tells), both off by default,
-each overridable per-run in the generate form. A run's own generate form can also
-set a country/location to benchmark salary research against, overriding the
-vacancy's own stated location — useful for a remote role. Two path/network
-overrides only live in `.env`, since they're read before the database even exists:
-- `DATA_DIR` — redirects the SQLite DB and every run artifact away from `./data`.
-- `GUI_PORT` — the GUI's port, default `3939`.
-
-**Where things end up** — not configuration, but worth knowing when moving machines
-or debugging: `data/db/app.sqlite3` (run state and admin settings) and
-`data/runs/<runId>/` (that run's vacancy report and generated application package as
-plain files — `vacancy-report.md`, `application-package/`, etc.). Both are
-gitignored; see "Moving to another machine" above for what to bring.
-
-## LLM provider
-
-Set `OPENROUTER_API_KEY` (see `.env.example`) to use OpenRouter, or `AZURE_OPENAI_API_KEY`
-to use Azure OpenAI — both are supported side by side. Leave `LLM_PROVIDER` unset to
-auto-detect (OpenRouter wins if configured, else Azure, else every agent falls back
-to its deterministic stub — no crash, no real calls). Set `LLM_PROVIDER` explicitly
-only if you want an unconfigured choice to fail loudly instead.
+Apache-2.0 — see [LICENSE](LICENSE).

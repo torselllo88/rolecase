@@ -62,7 +62,7 @@ export async function renderAdminWorkbenches() {
              still work either way.
            </div>`
     }
-    <div class="card">
+    <div class="card settings-section">
       <h2>New workbench</h2>
       <label>Slug (used in its URL — lowercase letters, numbers, hyphens)
         <input type="text" id="wb-new-slug" placeholder="e.g. alex" ${workspacesEnabled ? "" : "disabled"}>

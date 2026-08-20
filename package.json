@@ -4,6 +4,14 @@
   "description": "An AI assistant for evaluating job opportunities and drafting tailored applications, with human approval at every step.",
   "license": "Apache-2.0",
   "keywords": ["ai-agents", "job-search", "resume", "cover-letter", "llm", "multi-agent", "openrouter"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/torselllo88/rolecase.git"
+  },
+  "homepage": "https://github.com/torselllo88/rolecase#readme",
+  "bugs": {
+    "url": "https://github.com/torselllo88/rolecase/issues"
+  },
   "type": "module",
   "private": true,
   "bin": {

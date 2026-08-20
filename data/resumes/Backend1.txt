@@ -1,0 +1,50 @@
+Daniel Mercer
+Senior Backend Engineer
+Berlin, Germany
+daniel.mercer@example.com
+github.com/dmercer-dev
+
+Summary
+
+Senior Backend Engineer with 8+ years of experience building high-throughput APIs, distributed services, and data-intensive backend systems. Strong background in TypeScript, Node.js, PostgreSQL, Kafka, and AWS. Experienced in service decomposition, performance optimization, production reliability, and technical leadership.
+
+Experience
+
+Senior Backend Engineer — CloudLedger
+Berlin, Germany · 2022–Present
+
+Designed and maintained backend services for a B2B payments platform processing more than 4 million API requests per day.
+Led the migration of several core services from a legacy monolith to independently deployable Node.js services.
+Reduced p95 API latency from approximately 480 ms to 190 ms through query optimization, caching, and asynchronous processing.
+Introduced Kafka-based event processing for payment status updates and reconciliation workflows.
+Improved production observability using OpenTelemetry, Grafana, and structured logging.
+Mentored three backend engineers and regularly participated in architecture reviews.
+
+Backend Engineer — ParcelGrid
+Hamburg, Germany · 2019–2022
+
+Developed APIs and asynchronous processing services for a logistics platform used by enterprise customers across Europe.
+Built integrations with external carrier APIs and internal warehouse systems.
+Designed PostgreSQL data models for shipment tracking and billing workflows.
+Introduced Redis caching for high-volume tracking endpoints, reducing database load by roughly 35%.
+Helped migrate deployment infrastructure from manually managed VMs to Kubernetes on AWS.
+
+Software Engineer — Northstar Digital
+Berlin, Germany · 2017–2019
+
+Developed backend functionality for several SaaS products using JavaScript, Node.js, and PostgreSQL.
+Implemented REST APIs, authentication flows, background jobs, and third-party integrations.
+Worked closely with frontend engineers and product managers in small cross-functional teams.
+Education
+
+B.Sc. Computer Science
+Technical University of Berlin · 2013–2017
+
+Technical skills
+
+Languages: TypeScript, JavaScript, Python, SQL
+Backend: Node.js, Express, Fastify
+Data: PostgreSQL, Redis, Kafka
+Infrastructure: AWS, Docker, Kubernetes, Terraform
+Observability: OpenTelemetry, Grafana, Prometheus
+Testing: Vitest, Jest, integration testing

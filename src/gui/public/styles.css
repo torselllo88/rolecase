@@ -586,6 +586,7 @@ details.card summary h2 { display: inline; }
 
 .admin-edit-form { align-items: stretch; }
 .admin-edit-form input[type="text"],
+.admin-edit-form input[type="password"],
 .admin-edit-form textarea {
   display: block;
   width: 100%;
@@ -602,7 +603,8 @@ details.card summary h2 { display: inline; }
 .settings-section { margin-bottom: 16px; }
 .settings-section label { display: block; margin: 10px 0; }
 .settings-section select,
-.settings-section input[type="text"] {
+.settings-section input[type="text"],
+.settings-section input[type="password"] {
   font: inherit;
   padding: 6px 8px;
   border: 1px solid var(--border);
