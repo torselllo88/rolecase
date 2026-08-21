@@ -1,4 +1,4 @@
-import { api, app, escapeHtml, formatDate, showError } from "../../shared.js";
+import { api, app, demoPreviewBannerHtml, escapeHtml, formatDate, isDemoWorkspace, showError } from "../../shared.js";
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,6 +31,17 @@ function rowHtml(r) {
     </div>`;
 }
 
+function readOnlyRowHtml(r) {
+  const typeBadge = r.type === "pdf" ? "" : `<span class="badge info">text</span> `;
+  return `
+    <div class="admin-list-row" data-id="${escapeHtml(r.id)}">
+      <div>
+        <strong>${typeBadge}${escapeHtml(r.fileName)}</strong>
+        <div class="field-label">${formatBytes(r.sizeBytes)} · uploaded ${escapeHtml(formatDate(r.uploadedAt))}</div>
+      </div>
+    </div>`;
+}
+
 function editFormHtml(r) {
   return `
     <div class="admin-list-row admin-edit-form" data-id="${escapeHtml(r.id)}">
@@ -52,6 +63,18 @@ export async function renderAdminResumes() {
     ({ resumes } = await api("/api/admin/resumes"));
   } catch (err) {
     app.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (isDemoWorkspace()) {
+    app.innerHTML = `
+      <div class="breadcrumb"><a href="#/admin">Preview</a> / Resumes</div>
+      <div class="page-header"><h1>Resumes</h1></div>
+      ${demoPreviewBannerHtml()}
+      <div class="card">
+        ${resumes.length === 0 ? `<div class="empty-state"><p>No resumes yet.</p></div>` : resumes.map(readOnlyRowHtml).join("")}
+      </div>
+    `;
     return;
   }
 

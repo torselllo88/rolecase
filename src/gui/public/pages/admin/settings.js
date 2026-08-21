@@ -1,4 +1,29 @@
-import { api, app, escapeHtml } from "../../shared.js";
+import { api, app, demoPreviewBannerHtml, escapeHtml, isDemoWorkspace } from "../../shared.js";
+
+/**
+ * Demo never has real settings (forced stub, no keys) — rather than showing
+ * an all-blank page that undersells the feature, this fills in illustrative
+ * example values so a visitor can see the shape of per-agent overrides, agent
+ * instructions, etc. None of it is real, and the whole page renders inside a
+ * <fieldset disabled> below, so it can never actually be edited or saved.
+ */
+const DEMO_EXAMPLE_SETTINGS = {
+  llmProvider: "openrouter",
+  openRouterApiKeyConfigured: true,
+  openRouterModel: "anthropic/claude-sonnet-4.5",
+  openRouterModelByConsumer: { CRITIC: "anthropic/claude-haiku-latest" },
+  azureApiKeyConfigured: false,
+  azureEndpoint: "",
+  azureApiVersion: "",
+  azureDeployment: "",
+  braveSearchApiKeyConfigured: true,
+  defaultIncludeCoverLetter: true,
+  defaultHumanizeStyle: true,
+  defaultAvoidOverfitting: false,
+  defaultLimits: { coverLetterMinWords: 200, coverLetterMaxWords: 450, answerMaxWords: 150 },
+  maxWriterCriticIterations: 4,
+  agentInstructions: { WRITER: "Keep tone confident but understated — no superlatives." },
+};
 
 // Mirrors src/types/agent.ts's AgentName values — the id suffix (agent-key.toLowerCase())
 // is what the textarea's DOM id and the request body key are both keyed by.
@@ -28,13 +53,18 @@ function keyStatusField(idPrefix, label, configured) {
 
 /** `savedMessage`, when given, is shown in the feedback slot right after this render — used to carry a "✓ Saved" confirmation across the full re-render the save handler triggers (a plain post-save `feedback.innerHTML` write gets wiped out immediately by that re-render otherwise). */
 export async function renderAdminSettings(savedMessage) {
-  app.innerHTML = `<div class="loading">Loading settings…</div>`;
+  const isDemo = isDemoWorkspace();
   let settings;
-  try {
-    settings = await api("/api/admin/settings");
-  } catch (err) {
-    app.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
-    return;
+  if (isDemo) {
+    settings = DEMO_EXAMPLE_SETTINGS;
+  } else {
+    app.innerHTML = `<div class="loading">Loading settings…</div>`;
+    try {
+      settings = await api("/api/admin/settings");
+    } catch (err) {
+      app.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
+      return;
+    }
   }
 
   const provider = settings.llmProvider ?? "";
@@ -47,8 +77,10 @@ export async function renderAdminSettings(savedMessage) {
   const maxWriterCriticIterations = settings.maxWriterCriticIterations ?? "";
 
   app.innerHTML = `
-    <div class="breadcrumb"><a href="#/admin">Admin</a> / Settings</div>
+    <div class="breadcrumb"><a href="#/admin">${isDemo ? "Preview" : "Admin"}</a> / Settings</div>
     <div class="page-header"><h1>Settings</h1></div>
+    ${isDemo ? demoPreviewBannerHtml() : ""}
+    <fieldset ${isDemo ? "disabled" : ""} style="border:0;padding:0;margin:0">
 
     <div class="card settings-section">
       <h2>Generation defaults</h2>
@@ -128,6 +160,7 @@ export async function renderAdminSettings(savedMessage) {
       </div>
       <div id="s-save-feedback"></div>
     </div>
+    </fieldset>
   `;
 
   if (savedMessage) {

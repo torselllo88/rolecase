@@ -23,10 +23,13 @@ const HELP_ITEM = { route: "help", href: "#/help", icon: iconHelp, label: "Help"
 // landing page — rendered as its own <a>, not folded into ADMIN_ITEMS below,
 // so `setActiveRoute()` has something with `data-route="admin"` to highlight
 // when you're on #/admin itself. Label is kind-aware: a friend using their own
-// workbench sees "My workspace" (their own resumes/examples/settings), not the
-// literal word "Admin", which would misleadingly suggest they have admin rights.
+// workbench sees "My workspace" (their own resumes/examples/settings), and a
+// demo visitor sees "Preview" — neither should see the literal word "Admin",
+// which would misleadingly suggest they have admin rights.
 function adminHubLabel() {
-  return window.__WORKSPACE_KIND__ === "workbench" ? "My workspace" : "Admin";
+  if (window.__WORKSPACE_KIND__ === "workbench") return "My workspace";
+  if (window.__WORKSPACE_KIND__ === "demo") return "Preview";
+  return "Admin";
 }
 const ADMIN_ITEMS = [
   { route: "admin-resumes", href: "#/admin/resumes", icon: iconResume, label: "Resumes" },
@@ -65,15 +68,14 @@ function applyTheme(theme) {
 
 export function initShell() {
   const sidebar = document.getElementById("sidebar");
-  // Demo has zero access to /api/admin/* (hard-blocked server-side), so the whole
-  // section would be dead links there; a workbench manages its own resumes/
-  // examples/settings but never OTHER workbenches, so only that one sub-item drops.
-  const isDemo = window.__WORKSPACE_KIND__ === "demo";
+  // Demo gets the same read-only preview of Resumes/Answer examples/Cover
+  // letters/Candidate notes/Settings as a workbench would see of its own data
+  // (see each admin/*.js page for the read-only rendering) — "Workbenches"
+  // management stays admin-only regardless, since isAdminWorkspace() is false
+  // for demo, same as for a workbench.
   const adminHub = { route: "admin", href: "#/admin", icon: iconAdmin, label: adminHubLabel() };
   const adminItems = isAdminWorkspace() ? [...ADMIN_ITEMS, WORKBENCHES_ITEM] : ADMIN_ITEMS;
-  const adminSectionHtml = isDemo
-    ? ""
-    : `${navLinkHtml(adminHub, "sidebar-section-label")}${adminItems.map((item) => navLinkHtml(item)).join("")}`;
+  const adminSectionHtml = `${navLinkHtml(adminHub, "sidebar-section-label")}${adminItems.map((item) => navLinkHtml(item)).join("")}`;
 
   // Legacy/single-instance mode (window.__WORKSPACE_BASE__ === "") has no
   // session/login at all — nothing to sign out of, so this stays hidden there.

@@ -266,6 +266,15 @@ makes one passwordless. With demo enabled, `/` redirects there automatically,
 `/admin` directly (its own login page); the demo UI deliberately shows no link
 to it.
 
+The demo also auto-seeds a single fictional candidate (resume, past answers,
+past cover letters, and candidate notes) on first startup, so a first-time
+visitor has something to analyze against instead of an empty library — click
+"Try a sample vacancy" on the dashboard for a matching posting. Demo also gets
+a read-only preview of Resumes/Answer examples/Cover letters/Candidate notes/
+Settings (not Workbenches) — same UI a real workspace has, with every control
+disabled; the read-only exposure is enforced server-side (GET-only, per
+route), not just hidden in the UI.
+
 **What's local, what's not** — everything lives under `./data/` (override with
 `DATA_DIR`): a SQLite file for run state/settings, and plain files for generated
 reports/packages/traces and your profile content. Nothing is sent anywhere except

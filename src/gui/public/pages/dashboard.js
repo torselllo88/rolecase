@@ -6,6 +6,42 @@ const RECOMMENDATION_BADGE = {
   REJECT: "bad",
 };
 
+// Demo-only quick-fill — deliberately has a couple of stretch requirements
+// (Go, deeper Kubernetes/platform ownership) the seeded sample resume/notes
+// don't fully cover, so a hands-off demo visitor still sees a real fit
+// assessment with actual reasoning, not a trivial 100/100.
+const SAMPLE_VACANCY_TEXT = `Senior Backend Engineer — Meridian Pay
+
+Meridian Pay is a Berlin-based fintech platform providing payment infrastructure
+for mid-size B2B marketplaces across Europe. We're growing our platform team and
+looking for a Senior Backend Engineer to help us scale our transaction processing
+systems.
+
+Location: Berlin (hybrid, 2 days/week in office) or remote within the EU.
+
+What you'll do:
+- Design and build backend services for our core payments and settlement platform.
+- Own service boundaries and data models for transaction processing, reconciliation, and reporting.
+- Work with event-driven architecture (Kafka) to process payment state changes reliably at scale.
+- Improve reliability and observability of production systems handling millions of daily requests.
+- Contribute to our platform's move toward greater Kubernetes-based operational ownership.
+- Mentor mid-level engineers and participate in architecture reviews.
+
+What we're looking for:
+- 5+ years of backend engineering experience, ideally in fintech, payments, or another
+  transactional/regulated domain.
+- Strong experience with Node.js/TypeScript and PostgreSQL.
+- Experience with Kafka or another event-streaming system in production.
+- Solid understanding of AWS (ECS/EKS, RDS, S3, IAM).
+- Comfortable owning services end-to-end, including production incidents.
+- Nice to have: hands-on Kubernetes platform engineering experience; familiarity with Go.
+
+Compensation: EUR 85k-110k base, plus equity, depending on experience.
+
+We're a 40-person team, mostly engineers, with a flat structure and no dedicated
+platform/SRE team yet — senior backend engineers are expected to also own a good
+chunk of operational and infrastructure decisions.`;
+
 export async function renderDashboard() {
   app.innerHTML = `<div class="loading">Loading runs…</div>`;
   let runs;
@@ -51,12 +87,17 @@ export async function renderDashboard() {
       <form id="new-run-form" class="new-run">
         <span class="field-label">Vacancy URL or raw text</span>
         <textarea id="new-run-source" placeholder="https://... or paste the vacancy text" required></textarea>
+        ${
+          isDemo
+            ? `<button type="button" id="fill-sample-vacancy">Try a sample vacancy</button>`
+            : ""
+        }
         <span class="field-label">Country/location for salary research (optional) — overrides the vacancy's own listed location; useful for a remote role</span>
         <input type="text" id="new-run-salary-location" placeholder="e.g. Germany, or Poland">
         ${
           isDemo
-            ? `<span class="field-label">Optionally paste your resume for a more grounded result (used for this application only — never saved or shown to anyone else)</span>
-               <textarea id="new-run-resume-text" placeholder="Paste your resume text here (optional)"></textarea>`
+            ? `<span class="field-label">Optionally paste your own resume instead of the sample candidate (used for this application only — never saved or shown to anyone else)</span>
+               <textarea id="new-run-resume-text" placeholder="Leave blank to use the seeded sample resume (Daniel Mercer)"></textarea>`
             : ""
         }
         <div class="actions">
@@ -96,6 +137,10 @@ export async function renderDashboard() {
         btn.disabled = false;
       }
     });
+  });
+
+  document.getElementById("fill-sample-vacancy")?.addEventListener("click", () => {
+    document.getElementById("new-run-source").value = SAMPLE_VACANCY_TEXT;
   });
 
   document.getElementById("new-run-form").addEventListener("submit", async (e) => {

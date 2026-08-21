@@ -57,6 +57,7 @@ import {
   refreshWorkbenchLlmProviders,
 } from "./orchestratorRegistry.js";
 import { FixedWindowRateLimiter, resolveClientIp } from "./rateLimiter.js";
+import { seedDemoWorkspaceIfEmpty } from "./demoSeed.js";
 import { closeDb } from "../persistence/db.js";
 import {
   demoDescriptorIfEnabled,
@@ -1242,6 +1243,14 @@ const ADMIN_WORKBENCHES_PATTERN = /^\/api\/admin\/workbenches$/;
 const ADMIN_WORKBENCH_ITEM_PATTERN = /^\/api\/admin\/workbenches\/([^/]+)$/;
 const ADMIN_WORKBENCH_RESET_PATTERN = /^\/api\/admin\/workbenches\/([^/]+)\/reset$/;
 
+/** The only part of /api/admin/ ever let through for demo — see the gate in dispatch(). Plural "list" endpoints only: no item-level route here ever accepts anything but a mutating verb (PUT/DELETE). */
+const DEMO_READONLY_PREVIEW_PATTERNS = [
+  ADMIN_RESUMES_PATTERN,
+  ADMIN_ANSWER_EXAMPLES_PATTERN,
+  ADMIN_COVER_LETTERS_PATTERN,
+  ADMIN_CANDIDATE_NOTES_PATTERN,
+];
+
 /**
  * Everything that used to run against `url.pathname` and the module-level
  * `orchestrator` singleton now runs against the workspace-stripped `pathname`
@@ -1267,8 +1276,15 @@ async function dispatch(
   // Demo is intentionally forceStubLlm/forceStubSearch at the Orchestrator level
   // (see orchestratorRegistry.ts) — this 403 is defense in depth on top of that,
   // so an anonymous visitor can never even reach the settings-mutation surface.
+  // Narrow exception: a GET on one of the four library list endpoints lets the
+  // demo UI show the seeded sample resume/answers/letters/notes read-only —
+  // every mutating verb, plus settings and workbenches entirely, stay blocked.
   if (descriptor.kind === "demo" && pathname.startsWith("/api/admin/")) {
-    return sendJson(res, 403, { error: "Not available in the demo workspace" });
+    const isReadonlyPreview =
+      req.method === "GET" && DEMO_READONLY_PREVIEW_PATTERNS.some((pattern) => pattern.test(pathname));
+    if (!isReadonlyPreview) {
+      return sendJson(res, 403, { error: "Not available in the demo workspace" });
+    }
   }
 
   if (req.method === "GET" && pathname === "/api/runs") {
@@ -1508,6 +1524,8 @@ server.listen(PORT, HOST, () => {
 // data directory rather than falling back to the ambient default.
 const demoDescriptor = demoDescriptorIfEnabled();
 if (demoDescriptor) {
+  runWithWorkspace(demoDescriptor, () => seedDemoWorkspaceIfEmpty());
+
   const demoOrchestrator = getOrchestratorForWorkspace(demoDescriptor);
   const sweep = (): void => {
     void runWithWorkspace(demoDescriptor, () => demoOrchestrator.purgeStaleRuns(env.demoRunTtlHours)).catch((err) => {

@@ -1,4 +1,4 @@
-import { api, app, escapeHtml, showError } from "../../shared.js";
+import { api, app, demoPreviewBannerHtml, escapeHtml, isDemoWorkspace, showError } from "../../shared.js";
 
 function truncate(text, max) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -27,6 +27,13 @@ function entryRowHtml(entry) {
     </div>`;
 }
 
+function readOnlyRowHtml(entry) {
+  return `
+    <div class="admin-list-row" data-id="${escapeHtml(entry.id)}">
+      <p>${escapeHtml(truncate(entry.text, 240))}</p>
+    </div>`;
+}
+
 function entryFormHtml(id, text) {
   return `
     <div class="admin-list-row admin-edit-form" data-id="${escapeHtml(id || "")}">
@@ -48,6 +55,19 @@ export async function renderAdminCandidateNotes() {
     ({ entries } = await api("/api/admin/candidate-notes"));
   } catch (err) {
     app.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (isDemoWorkspace()) {
+    app.innerHTML = `
+      <div class="breadcrumb"><a href="#/admin">Preview</a> / Candidate notes</div>
+      <div class="page-header"><h1>Candidate notes</h1></div>
+      <p class="field-label">Free-form background info about the candidate that doesn't fit as a resume or a Q&amp;A pair — used as additional grounding for cover letters and answers.</p>
+      ${demoPreviewBannerHtml()}
+      <div class="card">
+        ${entries.length === 0 ? `<div class="empty-state"><p>No notes yet.</p></div>` : entries.map(readOnlyRowHtml).join("")}
+      </div>
+    `;
     return;
   }
 

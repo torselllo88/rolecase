@@ -1,4 +1,4 @@
-import { api, app, escapeHtml, showError } from "../../shared.js";
+import { api, app, demoPreviewBannerHtml, escapeHtml, isDemoWorkspace, showError } from "../../shared.js";
 
 function entryRowHtml(entry) {
   if (!entry.editable) {
@@ -22,6 +22,16 @@ function entryRowHtml(entry) {
       <div class="actions">
         <button type="button" class="example-edit" data-id="${escapeHtml(entry.id)}">Edit</button>
         <button type="button" class="danger example-delete" data-id="${escapeHtml(entry.id)}">Delete</button>
+      </div>
+    </div>`;
+}
+
+function readOnlyRowHtml(entry) {
+  return `
+    <div class="admin-list-row" data-id="${escapeHtml(entry.id)}">
+      <div class="qa">
+        <div class="q">${escapeHtml(entry.question)}</div>
+        <div>${escapeHtml(entry.answer)}</div>
       </div>
     </div>`;
 }
@@ -54,6 +64,18 @@ export async function renderAdminAnswerExamples() {
     ({ entries } = await api("/api/admin/answer-examples"));
   } catch (err) {
     app.innerHTML = `<div class="error-banner">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (isDemoWorkspace()) {
+    app.innerHTML = `
+      <div class="breadcrumb"><a href="#/admin">Preview</a> / Answer examples</div>
+      <div class="page-header"><h1>Answer examples</h1></div>
+      ${demoPreviewBannerHtml()}
+      <div class="card">
+        ${entries.length === 0 ? `<div class="empty-state"><p>No examples yet.</p></div>` : entries.map(readOnlyRowHtml).join("")}
+      </div>
+    `;
     return;
   }
 

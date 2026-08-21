@@ -82,6 +82,15 @@ export function showError(message) {
   app.insertAdjacentHTML("afterbegin", `<div class="error-banner">${escapeHtml(message)}</div>`);
 }
 
+export function isDemoWorkspace() {
+  return window.__WORKSPACE_KIND__ === "demo";
+}
+
+/** Shown at the top of every admin/* page's read-only demo rendering — same banner everywhere so it's instantly recognizable as "this one's just a preview." */
+export function demoPreviewBannerHtml() {
+  return `<div class="warning-banner">Read-only preview in the public demo — this shows what a real workspace looks like, but nothing here can be changed.</div>`;
+}
+
 export function showWarnings(warnings) {
   if (warnings && warnings.length) {
     app.insertAdjacentHTML("afterbegin", `<div class="warning-banner">${warnings.map(escapeHtml).join("<br>")}</div>`);
