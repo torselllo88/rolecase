@@ -30,11 +30,6 @@ export function lowerFirst(s: string): string {
   return s.length > 0 ? s[0]!.toLowerCase() + s.slice(1) : s;
 }
 
-/** Joins issue descriptions for a "revised to address: ..." note, stripping each one's own trailing period first so the note doesn't end up with two. */
-export function joinIssues(issues: readonly string[]): string {
-  return issues.map((issue) => issue.replace(/\.+$/, "")).join("; ");
-}
-
 /** Joins a list of short phrases into a natural "A, B, and C" clause — used to weave multiple candidate strengths into one sentence instead of dumping them as a bare, period-joined list. */
 export function joinNaturally(items: readonly string[]): string {
   if (items.length === 0) return "";

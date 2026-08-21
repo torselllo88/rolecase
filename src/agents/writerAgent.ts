@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentName } from "../types/agent.js";
 import { estimateCostUsd } from "../llm/pricing.js";
 import { BaseAgent, withPromptAddendum, type AgentExecutionContext } from "./baseAgent.js";
-import { capitalize, joinIssues, joinNaturally, lowerFirst, pick, stableHash } from "./stubUtils.js";
+import { capitalize, joinNaturally, lowerFirst, pick, stableHash } from "./stubUtils.js";
 
 const WriterLimitsSchema = z.object({
   coverLetterMinWords: z.number().int().positive(),
@@ -283,16 +283,18 @@ export class WriterAgent extends BaseAgent<WriterInput, WriterOutput> {
     const resumeNote = input.candidateResumeText
       ? ` My resume covers this in more detail: ${input.candidateResumeText.slice(0, 60)}...`
       : "";
-    const coverLetterIssues = input.priorIssuesByPieceId["cover_letter"] ?? [];
-    const revisionNote =
-      coverLetterIssues.length > 0
-        ? ` I've revised this to address earlier feedback: ${joinIssues(coverLetterIssues)}.`
-        : "";
     const closing = pick(CLOSING_BANK, seed + 2);
 
+    // input.priorIssuesByPieceId is deliberately never woven into this text —
+    // a real LLM revises IN RESPONSE to prior feedback, it doesn't narrate
+    // "I've revised this to address: <critic's own issue description>" inside
+    // the letter itself, which is what an earlier version of this stub did.
+    // That's not something a real candidate would ever write, and it's not
+    // what the real (non-stub) path produces either — narrating it here made
+    // the stub actively less representative of real output, not more.
     return (
       `Dear Hiring Team,\n\n${opening}${strengthSentence}${requirementNote}${responsibilityNote}` +
-      `${resumeNote}${revisionNote}\n\n${closing}\n\nSincerely,\nCandidate`
+      `${resumeNote}\n\n${closing}\n\nSincerely,\nCandidate`
     );
   }
 
@@ -305,8 +307,8 @@ export class WriterAgent extends BaseAgent<WriterInput, WriterOutput> {
     const guidanceNote = q.guidance
       ? ` You asked me to make sure to cover: ${q.guidance} — that's exactly what my experience in ${strength} speaks to.`
       : "";
-    const issues = input.priorIssuesByPieceId[q.id] ?? [];
-    const revisionNote = issues.length > 0 ? ` Revised to address: ${joinIssues(issues)}.` : "";
-    return { id: q.id, question: q.question, answer: `${base}${guidanceNote}${revisionNote}` };
+    // See buildStubCoverLetter's comment above — same reasoning for dropping
+    // the "Revised to address: ..." meta-narration.
+    return { id: q.id, question: q.question, answer: `${base}${guidanceNote}` };
   }
 }

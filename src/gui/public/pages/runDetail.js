@@ -105,7 +105,7 @@ function renderVacancyReport(report) {
  * see regeneratePiece() on the orchestrator for what actually happens.
  */
 function renderPieceCard(heading, text, opts) {
-  const { maxCharacters, review, evidence, pieceId, runId, guidance, isCoverLetter, limits } = opts;
+  const { maxCharacters, review, evidence, pieceId, runId, guidance, isCoverLetter, limits, isStubRun } = opts;
   const lengthBadge = maxCharacters
     ? badge(`${text.length}/${maxCharacters} characters`, text.length > maxCharacters ? "bad" : "ok")
     : "";
@@ -118,6 +118,20 @@ function renderPieceCard(heading, text, opts) {
           .map((i) => `<li>${badge(i.severity, i.severity === "critical" ? "bad" : "warn")} ${escapeHtml(i.description)}</li>`)
           .join("")}</ul>`
       : "";
+  // review.iteration is the round this piece LOCKED on — real bookkeeping
+  // from the writer/critic loop's progressive locking (see writerCriticLoop.ts),
+  // not stub-specific. Surfaced so "converged, no issues" doesn't read as
+  // "nothing happened" when it actually took a round or two of revision.
+  const revisions = review ? review.iteration - 1 : 0;
+  const iterationNote = review
+    ? `<p class="field-label">${
+        review.converged
+          ? revisions === 0
+            ? "Converged on the first draft — no revisions needed."
+            : `Converged after ${revisions} revision${revisions === 1 ? "" : "s"} of writer/critic review.`
+          : `Still has open issues after ${review.iteration} round${review.iteration === 1 ? "" : "s"} of review — hit the revision cap.`
+      }</p>`
+    : "";
   const evidenceBlock =
     evidence && evidence.entries.length
       ? `<h4>Evidence check</h4>${evidence.entries
@@ -130,7 +144,9 @@ function renderPieceCard(heading, text, opts) {
           </div>`
           )
           .join("")}`
-      : "";
+      : isStubRun
+        ? `<p class="field-label">Evidence check didn't run — it only runs with a real LLM configured (no API calls happen in stub mode).</p>`
+        : "";
   const lengthField = isCoverLetter
     ? `<div class="limits-row">
          <label>Min words <input type="number" class="piece-regenerate-min-words" min="1" placeholder="200" value="${limits?.coverLetterMinWords ?? ""}"></label>
@@ -155,6 +171,7 @@ function renderPieceCard(heading, text, opts) {
         <summary><h3 style="display:inline">${escapeHtml(heading)}</h3><span class="disclosure-chevron">${iconChevron()}</span></summary>
         <pre class="letter">${escapeHtml(text)}</pre>
         <div class="actions">${lengthBadge}${convergedBadge}</div>
+        ${iterationNote}
         ${issuesList}
         ${evidenceBlock}
       </details>
@@ -163,7 +180,7 @@ function renderPieceCard(heading, text, opts) {
   `;
 }
 
-function renderApplicationPackage(files, runId, guidanceById, limits) {
+function renderApplicationPackage(files, runId, guidanceById, limits, isStubRun) {
   if (!files || Object.keys(files).length === 0) return "";
 
   const resumeEdits = files["resume-edits.md"];
@@ -218,6 +235,7 @@ function renderApplicationPackage(files, runId, guidanceById, limits) {
         guidance: guidanceById?.[COVER_LETTER_PIECE_ID],
         isCoverLetter: true,
         limits,
+        isStubRun,
       })
     : "";
   const answerCards = answers
@@ -229,6 +247,7 @@ function renderApplicationPackage(files, runId, guidanceById, limits) {
         pieceId: a.id,
         runId,
         guidance: guidanceById?.[a.id],
+        isStubRun,
       })
     )
     .join("");
@@ -405,6 +424,11 @@ export async function renderRunDetail(runId, formOverride) {
   }
 
   const { run, vacancyReport, applicationPackageFiles, trace, generationSettings, appSettingsDefaults } = data;
+  // Whether this run ever made a real model call, anywhere — the definitive
+  // "stub mode" signal (see multiWorkspace.test.ts's forceStubLlm case for the
+  // same technique). Used below to explain an Evidence Checker section that's
+  // genuinely empty because no LLM ran, rather than leaving it silently blank.
+  const isStubRun = !trace || !trace.some((e) => e.eventType === "model_call");
   const actions = ACTIONS_BY_STATE[run.state] || [];
   const hasGenerate = actions.some((a) => a.key === "generate");
   const manualQuestions = formOverride?.manualQuestions ?? generationSettings?.manualQuestions;
@@ -464,7 +488,7 @@ export async function renderRunDetail(runId, formOverride) {
         : ""
     }
     ${renderVacancyReport(vacancyReport)}
-    ${renderApplicationPackage(applicationPackageFiles, runId, guidanceById, limits)}
+    ${renderApplicationPackage(applicationPackageFiles, runId, guidanceById, limits, isStubRun)}
     ${renderTrace(trace)}
     ${!isTransientState(run.state) ? renderRunManagement(run) : ""}
   `;
