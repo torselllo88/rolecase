@@ -30,6 +30,22 @@ describe("Orchestrator.updateSettings", () => {
     expect(updated.defaultHumanizeStyle).toBe(true);
   });
 
+  it("enables OpenRouter from just an API key when no .env model is set (built-in default model)", () => {
+    const updated = orchestrator.updateSettings({ llmProvider: "openrouter", openRouterApiKey: "sk-test-key" });
+    expect(updated.llmProvider).toBe("openrouter");
+  });
+
+  it("enables Azure entirely from GUI settings, including the API version, with no .env", () => {
+    const updated = orchestrator.updateSettings({
+      llmProvider: "azure",
+      azureApiKey: "azure-test-key",
+      azureEndpoint: "https://example.openai.azure.com",
+      azureApiVersion: "2024-08-01-preview",
+      azureDeployment: "test-deployment",
+    });
+    expect(updated.llmProvider).toBe("azure");
+  });
+
   it("persists and applies a valid provider selection", () => {
     const updated = orchestrator.updateSettings({
       llmProvider: "openrouter",

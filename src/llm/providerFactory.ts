@@ -33,7 +33,7 @@ function resolveProviderConfigs(
     azure: {
       apiKey: settings.azureApiKey ?? env.azureOpenAi.apiKey,
       endpoint: settings.azureEndpoint ?? env.azureOpenAi.endpoint,
-      apiVersion: env.azureOpenAi.apiVersion,
+      apiVersion: settings.azureApiVersion ?? env.azureOpenAi.apiVersion,
       defaultDeployment: settings.azureDeployment ?? env.azureOpenAi.defaultDeployment,
       largeDeployment: env.azureOpenAi.largeDeployment,
       deploymentByConsumer: env.azureOpenAi.deploymentByConsumer,

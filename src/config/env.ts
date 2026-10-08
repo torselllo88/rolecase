@@ -75,7 +75,11 @@ export const env = {
     baseUrl: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
     siteUrl: process.env.OPENROUTER_SITE_URL || undefined,
     siteName: process.env.OPENROUTER_SITE_NAME || undefined,
-    defaultModel: process.env.LLM_MODEL_DEFAULT || undefined,
+    // Same default as .env.example — without it, a fresh clone with no .env
+    // couldn't enable OpenRouter from the Settings page by pasting just a key
+    // (isOpenRouterConfigured() requires a model too, and the GUI's model
+    // field is optional), so the save was rejected as "not configured".
+    defaultModel: process.env.LLM_MODEL_DEFAULT || "~anthropic/claude-haiku-latest",
     modelByConsumer: {
       VACANCY_ANALYZER: process.env.LLM_MODEL_VACANCY_ANALYZER || undefined,
       COMPANY_RESEARCH: process.env.LLM_MODEL_COMPANY_RESEARCH || undefined,
