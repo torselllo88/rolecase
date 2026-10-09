@@ -603,6 +603,7 @@ details.card summary h2 { display: inline; }
 .settings-section { margin-bottom: 16px; }
 .settings-section label { display: block; margin: 10px 0; }
 .settings-section select,
+.resume-select-row select,
 .settings-section input[type="text"],
 .settings-section input[type="password"] {
   font: inherit;

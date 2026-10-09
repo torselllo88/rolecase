@@ -12,6 +12,7 @@ import { rejectCommand } from "./commands/reject.js";
 import { rejectPackageCommand } from "./commands/rejectPackage.js";
 import { retryCommand } from "./commands/retry.js";
 import { reviewCommand } from "./commands/review.js";
+import { selectResumeCommand } from "./commands/selectResume.js";
 import { statusCommand } from "./commands/status.js";
 import type { VacancySourceType } from "../types/vacancy.js";
 
@@ -50,6 +51,16 @@ program
   .description("Generate (or regenerate) the application package -> PACKAGE_READY")
   .argument("<runId>")
   .action(generateCommand);
+
+program
+  .command("select-resume")
+  .description(
+    "Pick the resume for this run without generating anything else (after analyze). The next " +
+      "`generate` reuses this choice. Does not change the run's workflow state."
+  )
+  .argument("<runId>")
+  .option("--resume <id>", "pick this resume by hand instead of letting the Resume Selector agent decide")
+  .action(selectResumeCommand);
 
 program
   .command("regenerate-piece")

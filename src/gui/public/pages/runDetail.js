@@ -278,6 +278,54 @@ function renderApplicationPackage(files, runId, guidanceById, limits, isStubRun)
  * full Generate/Regenerate), this submits immediately via `addQuestion` and
  * only that one new answer gets generated.
  */
+/** States where the backend's selectResume() accepts a call — keep in sync with RESUME_SELECTION_STATES in orchestrator.ts. */
+const RESUME_SELECTION_STATES = new Set(["ANALYSIS_READY", "ANALYSIS_APPROVED", "PACKAGE_REJECTED"]);
+
+/**
+ * Standalone resume pick — usable right after analysis, without generating a
+ * package. Once a package exists, its own "Resume selection" block shows what
+ * that package was grounded on; this card is about the NEXT generate.
+ */
+function renderResumeSelection(selection, options, canSelect) {
+  if (!selection && !canSelect) return "";
+  const nameById = new Map((options || []).map((o) => [o.id, o.fileName]));
+  const current = selection
+    ? `<p><strong>${escapeHtml(nameById.get(selection.selectedResumeId) || selection.selectedResumeId)}</strong>
+         ${badge(selection.source === "manual" ? "picked by hand" : "picked by agent", "neutral")}</p>
+       ${selection.source === "agent" ? `<p>${escapeHtml(selection.reasoning)}</p>` : ""}
+       ${
+         selection.suggestedModifications && selection.suggestedModifications.length
+           ? `<span class="field-label">Suggested modifications</span>${list(selection.suggestedModifications)}`
+           : ""
+       }`
+    : `<p class="field-label">No resume selected yet. Generate Package will pick one automatically, or pick one now — without writing anything else.</p>`;
+  const controls = canSelect
+    ? `<div class="actions resume-select-row" id="resume-select-bar">
+         <button type="button" class="${selection ? "" : "primary"}" id="select-resume-auto">${selection ? "Re-pick with agent" : "Pick best resume"}</button>
+         ${
+           options && options.length
+             ? `<select id="resume-select">
+                  ${options
+                    .map(
+                      (o) =>
+                        `<option value="${escapeHtml(o.id)}" ${selection?.selectedResumeId === o.id ? "selected" : ""}>${escapeHtml(o.fileName)}</option>`
+                    )
+                    .join("")}
+                </select>
+                <button type="button" id="select-resume-manual">Use this resume</button>`
+             : ""
+         }
+       </div>`
+    : "";
+  return `
+    <div class="card">
+      <h2>Resume</h2>
+      ${current}
+      ${controls}
+    </div>
+  `;
+}
+
 function renderAddQuestionForm(runId) {
   return `
     <details class="piece-regenerate">
@@ -423,7 +471,17 @@ export async function renderRunDetail(runId, formOverride) {
     return;
   }
 
-  const { run, vacancyReport, applicationPackageFiles, trace, generationSettings, appSettingsDefaults } = data;
+  const {
+    run,
+    vacancyReport,
+    applicationPackageFiles,
+    trace,
+    generationSettings,
+    appSettingsDefaults,
+    resumeSelection,
+    resumeOptions,
+  } = data;
+  const canSelectResume = Boolean(vacancyReport) && RESUME_SELECTION_STATES.has(run.state);
   // Whether this run ever made a real model call, anywhere — the definitive
   // "stub mode" signal (see multiWorkspace.test.ts's forceStubLlm case for the
   // same technique). Used below to explain an Evidence Checker section that's
@@ -488,6 +546,7 @@ export async function renderRunDetail(runId, formOverride) {
         : ""
     }
     ${renderVacancyReport(vacancyReport)}
+    ${renderResumeSelection(resumeSelection, resumeOptions, canSelectResume)}
     ${renderApplicationPackage(applicationPackageFiles, runId, guidanceById, limits, isStubRun)}
     ${renderTrace(trace)}
     ${!isTransientState(run.state) ? renderRunManagement(run) : ""}
@@ -596,6 +655,34 @@ export async function renderRunDetail(runId, formOverride) {
       }
     });
   });
+
+  const selectResume = async (btn, resumeId) => {
+    const bar = document.getElementById("resume-select-bar");
+    const unsavedFormState = captureUnsavedFormState();
+    bar.querySelectorAll("button, select").forEach((el) => (el.disabled = true));
+    const originalText = btn.textContent;
+    btn.textContent = resumeId ? "Saving…" : "Picking…";
+    try {
+      const { warnings } = await api(`/api/runs/${runId}/resume-selection`, {
+        method: "POST",
+        body: JSON.stringify(resumeId ? { resumeId } : {}),
+      });
+      await renderRunDetail(runId, unsavedFormState);
+      showWarnings(warnings);
+    } catch (err) {
+      showError(err.message);
+      bar.querySelectorAll("button, select").forEach((el) => (el.disabled = false));
+      btn.textContent = originalText;
+    }
+  };
+  const autoResumeBtn = document.getElementById("select-resume-auto");
+  if (autoResumeBtn) autoResumeBtn.addEventListener("click", () => selectResume(autoResumeBtn));
+  const manualResumeBtn = document.getElementById("select-resume-manual");
+  if (manualResumeBtn) {
+    manualResumeBtn.addEventListener("click", () =>
+      selectResume(manualResumeBtn, document.getElementById("resume-select").value)
+    );
+  }
 
   const addQuestionBtn = document.getElementById("add-question-btn");
   if (addQuestionBtn) {

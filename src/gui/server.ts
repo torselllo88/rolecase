@@ -624,6 +624,9 @@ function isExpensiveActionRoute(method: string | undefined, pathname: string): b
   if (pathname === "/api/runs") return true;
   if (RUN_PIECE_REGENERATE_PATTERN.test(pathname)) return true;
   if (RUN_PIECE_CREATE_PATTERN.test(pathname)) return true;
+  // Counted even for a manual pick (no LLM call) — the route can't know which
+  // one it is before reading the body, and this check runs before dispatch.
+  if (RUN_RESUME_SELECTION_PATTERN.test(pathname)) return true;
   const actionMatch = RUN_ACTION_PATTERN.exec(pathname);
   return actionMatch !== null && (actionMatch[2] === "generate" || actionMatch[2] === "retry");
 }
@@ -712,6 +715,8 @@ function handleGetRunDetail(
       applicationPackageFiles: orchestrator.getApplicationPackageFiles(runId),
       trace: orchestrator.getTrace(runId),
       generationSettings: fileStore.readGenerationSettings(runId) ?? null,
+      resumeSelection: orchestrator.getResumeSelection(runId) ?? null,
+      resumeOptions: orchestrator.listResumeOptions(runId),
       // Only the generation-default subset (never API keys/agent instructions) —
       // lets the generate form's checkboxes/limits reflect the admin-wide default
       // BEFORE a first generate() has ever run for this piece (which is the only
@@ -846,6 +851,33 @@ async function handleAddQuestion(
     sendJson(res, 200, { run: result.run, warnings: result.warnings });
   } catch (err) {
     const { status, message } = errorStatusAndMessage(err);
+    sendJson(res, status, { error: message });
+  }
+}
+
+/** Body `{resumeId}` picks that resume by hand; an empty body lets the Resume Selector agent decide. */
+async function handleSelectResume(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  orchestrator: Orchestrator,
+  runId: string,
+  ctx: { kind: WorkspaceKind; visitorId?: string }
+): Promise<void> {
+  let resumeId: string | undefined;
+  try {
+    assertRunOwnership(orchestrator.getRun(runId), ctx.kind, ctx.visitorId);
+    const body = await readJsonBody(req);
+    if ("resumeId" in body && body.resumeId !== null) {
+      if (typeof body.resumeId !== "string" || !body.resumeId.trim()) {
+        throw new HttpError(400, "resumeId must be a non-empty string or null");
+      }
+      resumeId = body.resumeId.trim();
+    }
+    const result = await orchestrator.selectResume(runId, resumeId);
+    sendJson(res, 200, { run: result.run, warnings: result.warnings });
+  } catch (err) {
+    // A manual pick's only plain-Error failure is an unknown resume id — a client mistake, not a server fault.
+    const { status, message } = errorStatusAndMessage(err, resumeId !== undefined ? 400 : 500);
     sendJson(res, status, { error: message });
   }
 }
@@ -1227,6 +1259,7 @@ function handleDeleteCandidateNote(res: http.ServerResponse, id: string): void {
 const RUN_DETAIL_PATTERN = /^\/api\/runs\/([^/]+)$/;
 const RUN_PIECE_REGENERATE_PATTERN = /^\/api\/runs\/([^/]+)\/pieces\/([^/]+)\/regenerate$/;
 const RUN_PIECE_CREATE_PATTERN = /^\/api\/runs\/([^/]+)\/pieces$/;
+const RUN_RESUME_SELECTION_PATTERN = /^\/api\/runs\/([^/]+)\/resume-selection$/;
 const RUN_ACTION_PATTERN =
   /^\/api\/runs\/([^/]+)\/(approve|reject|generate|accept|reject-package|confirm-submit|retry)$/;
 
@@ -1383,6 +1416,11 @@ async function dispatch(
   const pieceCreateMatch = RUN_PIECE_CREATE_PATTERN.exec(pathname);
   if (req.method === "POST" && pieceCreateMatch) {
     return await handleAddQuestion(req, res, orchestrator, pieceCreateMatch[1]!, ctx);
+  }
+
+  const resumeSelectionMatch = RUN_RESUME_SELECTION_PATTERN.exec(pathname);
+  if (req.method === "POST" && resumeSelectionMatch) {
+    return await handleSelectResume(req, res, orchestrator, resumeSelectionMatch[1]!, ctx);
   }
 
   const actionMatch = RUN_ACTION_PATTERN.exec(pathname);

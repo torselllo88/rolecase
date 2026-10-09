@@ -3,7 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { currentDataDir } from "../config/workspaceContext.js";
 import type { VacancyReport } from "../types/analysis.js";
-import type { ApplicationPackage } from "../types/application.js";
+import type { ApplicationPackage, StoredResumeSelection } from "../types/application.js";
 import type { GenerationSettings } from "../types/generationSettings.js";
 
 function runDir(runId: string): string {
@@ -165,6 +165,26 @@ export const fileStore = {
       .map(([file]) => file);
   },
 
+  /**
+   * Run-level resume choice (see StoredResumeSelection) — deliberately NOT
+   * inside application-package/, whose resume-selection.json records what a
+   * specific generated package was actually grounded on. This one exists
+   * before any package does, and is what the next generate() will use.
+   */
+  writeResumeSelection(runId: string, selection: StoredResumeSelection): void {
+    writeFile(path.join(runDir(runId), "selected-resume.json"), JSON.stringify(selection, null, 2));
+  },
+
+  readResumeSelection(runId: string): StoredResumeSelection | undefined {
+    const file = path.join(runDir(runId), "selected-resume.json");
+    if (!fs.existsSync(file)) return undefined;
+    try {
+      return JSON.parse(fs.readFileSync(file, "utf-8")) as StoredResumeSelection;
+    } catch {
+      return undefined;
+    }
+  },
+
   writeGenerationSettings(runId: string, settings: GenerationSettings): void {
     writeFile(path.join(runDir(runId), "generation-settings.json"), JSON.stringify(settings, null, 2));
   },
@@ -198,7 +218,7 @@ export const fileStore = {
    */
   clearDownstreamArtifacts(runId: string): void {
     const dir = runDir(runId);
-    for (const name of ["vacancy-report.json", "vacancy-report.md", "generation-settings.json"]) {
+    for (const name of ["vacancy-report.json", "vacancy-report.md", "generation-settings.json", "selected-resume.json"]) {
       fs.rmSync(path.join(dir, name), { force: true });
     }
     fs.rmSync(applicationPackageDir(runId), { recursive: true, force: true });

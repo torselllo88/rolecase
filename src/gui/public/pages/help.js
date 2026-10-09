@@ -38,6 +38,9 @@ export async function renderHelp() {
         <li><strong>Paste a vacancy</strong> on the Dashboard — a URL or the raw job posting text — and click Analyze.
           If a URL fails to scrape (bot-check, login wall, JS-only page), paste the posting text instead.</li>
         <li><strong>Approve or reject</strong> the fit analysis on the run's page. Rejecting ends the run here.</li>
+        <li><strong>Only need to know which resume to send?</strong> Use the run's <strong>Resume</strong> card —
+          "Pick best resume" lets the agent choose, or pick one by hand. Nothing else gets generated, and a later
+          Generate Package reuses this choice.</li>
         <li><strong>Add the application's questions</strong> (if any) as manual questions, optionally toggle
           "include a cover letter" / "humanize style", then click <strong>Generate Package</strong>.</li>
         <li><strong>Review the package</strong> — cover letter, each answer, evidence checks, quality issues.

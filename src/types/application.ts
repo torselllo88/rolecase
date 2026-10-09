@@ -8,6 +8,18 @@ export const ResumeSelectionSchema = z.object({
 export type ResumeSelection = z.infer<typeof ResumeSelectionSchema>;
 
 /**
+ * The run-level resume choice, made before (and independently of) generate()
+ * — either by the Resume Selector agent or picked by hand. generate() reuses
+ * it instead of re-running the selector, so the resume never silently changes
+ * between "pick a resume" and "write the package".
+ */
+export const StoredResumeSelectionSchema = ResumeSelectionSchema.extend({
+  source: z.enum(["agent", "manual"]),
+  selectedAt: z.string(),
+});
+export type StoredResumeSelection = z.infer<typeof StoredResumeSelectionSchema>;
+
+/**
  * Shared "one reviewable piece of writing" shape — the cover letter and every
  * dynamic application answer are each a piece. Defined once here and reused by
  * Critic and Evidence Checker rather than redefined per-agent.

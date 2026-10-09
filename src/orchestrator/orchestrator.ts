@@ -25,7 +25,7 @@ import { AnswerExampleLibrary } from "../tools/answerExampleLibrary.js";
 import { extractContentTool } from "../tools/vacancyScraper.js";
 import { CoverLetterLibrary } from "../tools/coverLetterLibrary.js";
 import { CandidateNotesLibrary } from "../tools/candidateNotesLibrary.js";
-import { ResumeLibrary, type ResumeCandidate } from "../tools/resumeLibrary.js";
+import { ResumeLibrary, listResumeFiles, type ResumeCandidate } from "../tools/resumeLibrary.js";
 import { SearchBroker } from "../tools/searchBroker.js";
 import { AgentName } from "../types/agent.js";
 import type { FitAnalysis, Recommendation, VacancyReport } from "../types/analysis.js";
@@ -37,6 +37,8 @@ import type {
   FinalReview,
   LockedPieceReview,
   PieceInput,
+  ResumeSelection,
+  StoredResumeSelection,
 } from "../types/application.js";
 import type { GenerationSettings, ManualQuestion } from "../types/generationSettings.js";
 import type { TraceEvent } from "../types/trace.js";
@@ -79,6 +81,28 @@ const TRANSIENT_STATES = new Set<WorkflowState>([
   WorkflowState.ANALYZING,
   WorkflowState.GENERATING_PACKAGE,
 ]);
+
+/**
+ * Where selectResume() is allowed: after an analysis exists, and before a
+ * package it would no longer affect. PACKAGE_REJECTED is included because
+ * the next generate() call (a regenerate) picks the selection up again.
+ */
+const RESUME_SELECTION_STATES = new Set<WorkflowState>([
+  WorkflowState.ANALYSIS_READY,
+  WorkflowState.ANALYSIS_APPROVED,
+  WorkflowState.PACKAGE_REJECTED,
+]);
+
+const MANUAL_SELECTION_REASONING = "Selected manually.";
+
+/** Strips the run-level bookkeeping fields — an ApplicationPackage's resumeSelection is the plain agent-output shape. */
+function toResumeSelection(stored: StoredResumeSelection): ResumeSelection {
+  return {
+    selectedResumeId: stored.selectedResumeId,
+    suggestedModifications: stored.suggestedModifications,
+    reasoning: stored.reasoning,
+  };
+}
 
 function decideRecommendation(fitScore: number): Recommendation {
   if (fitScore >= 70) return "APPLY";
@@ -815,20 +839,29 @@ export class Orchestrator {
 
       const resumeLibraryResult = await this.loadResumeLibrary(runId, tracer);
 
-      const resumeRequest = buildAgentRequest(runId, AgentName.RESUME_SELECTOR, {
-        vacancyTitle: report.vacancy.title,
-        vacancyRequirements: report.vacancy.requirements,
-        vacancyKeywords: report.vacancy.keywords,
-        missingSkills: report.fitAnalysis.missingSkills,
-        resumes: resumeLibraryResult.resumes,
-      });
-      const resumeResponse = await this.agents.resumeSelector.run(resumeRequest, {
-        tracer,
-        tools: { llm: this.llmProvider },
-        instructions: appSettings.agentInstructions,
-      });
-      if (resumeResponse.status === "error") throw new Error(resumeResponse.error.message);
-      if (resumeResponse.output.selectedResumeId === NO_RESUME_IN_LIBRARY_ID) {
+      // A selection made earlier via selectResume() (agent or by hand) wins —
+      // re-running the selector here could quietly swap in a different
+      // resume than the one the user already saw and accepted. Only fall
+      // back to a fresh selection when there's none yet, or the stored one
+      // points at a resume that's since been removed from the library.
+      const storedSelection = fileStore.readResumeSelection(runId);
+      const storedIsUsable =
+        storedSelection !== undefined &&
+        resumeLibraryResult.resumes.some((r) => r.id === storedSelection.selectedResumeId);
+      let resumeSelection: ResumeSelection;
+      let freshSelection: StoredResumeSelection | undefined;
+      if (storedIsUsable) {
+        resumeSelection = toResumeSelection(storedSelection);
+      } else {
+        if (storedSelection && storedSelection.selectedResumeId !== NO_RESUME_IN_LIBRARY_ID) {
+          warnings.push(
+            `The previously selected resume "${storedSelection.selectedResumeId}" is no longer in the Resume Library — a new one was selected automatically.`
+          );
+        }
+        resumeSelection = await this.runResumeSelector(runId, report, resumeLibraryResult.resumes, tracer);
+        freshSelection = { ...resumeSelection, source: "agent", selectedAt: new Date().toISOString() };
+      }
+      if (resumeSelection.selectedResumeId === NO_RESUME_IN_LIBRARY_ID) {
         // Otherwise this is invisible: the package still comes back
         // PACKAGE_READY with no error, and the actual note only shows up
         // inside a collapsed "Resume selection" <details> block a user has
@@ -885,7 +918,7 @@ export class Orchestrator {
       }
 
       const selectedResumeText = resumeLibraryResult.resumes.find(
-        (r) => r.id === resumeResponse.output.selectedResumeId
+        (r) => r.id === resumeSelection.selectedResumeId
       )?.text;
       const groundingText = buildGroundingText(selectedResumeText, candidateNotesResult.notes);
 
@@ -947,7 +980,7 @@ export class Orchestrator {
       );
 
       const pkg: ApplicationPackage = {
-        resumeSelection: resumeResponse.output,
+        resumeSelection,
         coverLetter: loopResult.coverLetter,
         applicationAnswers: loopResult.applicationAnswers,
         evidenceMap,
@@ -958,6 +991,7 @@ export class Orchestrator {
       return {
         onSuccessArtifacts: () => {
           fileStore.writeApplicationPackage(runId, pkg);
+          if (freshSelection) fileStore.writeResumeSelection(runId, freshSelection);
           fileStore.writeGenerationSettings(runId, {
             limits,
             manualQuestions,
@@ -1002,6 +1036,77 @@ export class Orchestrator {
    * `runWriterCriticLoop()` already operates on whatever subset of pieces
    * it's given, so no core-loop changes were needed to support this.
    */
+  getResumeSelection(runId: string): StoredResumeSelection | undefined {
+    return fileStore.readResumeSelection(runId);
+  }
+
+  /**
+   * Cheap listing for a "pick by hand" dropdown — file names only, no PDF
+   * parsing or LLM cleanup (unlike loadResumeLibrary()). A demo run with a
+   * pasted ad-hoc resume only ever sees that one, same as loadResumeLibrary().
+   */
+  listResumeOptions(runId: string): { id: string; fileName: string }[] {
+    if (fileStore.readAdhocResumeText(runId) !== undefined) {
+      return [{ id: `adhoc-${runId}`, fileName: "(pasted resume)" }];
+    }
+    return listResumeFiles().map((f) => ({ id: f.id, fileName: f.fileName }));
+  }
+
+  /**
+   * Side-action like `regeneratePiece` — picks the resume for this run
+   * without writing anything else, and without any workflow-state
+   * transition, so a user who only needs "which resume do I send?" can stop
+   * here. `resumeId` given means a manual pick (no LLM call); omitted means
+   * the Resume Selector agent decides. Either way the result is stored and
+   * the next generate() reuses it instead of selecting again.
+   */
+  async selectResume(runId: string, resumeId?: string): Promise<StepResult> {
+    const run = this.runRepo.getRunOrThrow(runId);
+    if (!RESUME_SELECTION_STATES.has(run.state)) {
+      throw new InvalidActionStateError("select_resume", run.state);
+    }
+    if (this.activeSteps.has(runId)) {
+      throw new Error(`A step is already running for run ${runId} — wait for it to finish before starting another.`);
+    }
+    this.activeSteps.add(runId);
+
+    const tracer = new Tracer(runId, this.traceRepo.getMaxSeq(runId));
+    try {
+      const report = fileStore.readVacancyReport(runId);
+      if (!report) throw new Error(`No vacancy report found for run ${runId}`);
+
+      const warnings: string[] = [];
+      let selection: ResumeSelection;
+      if (resumeId !== undefined) {
+        if (!this.listResumeOptions(runId).some((r) => r.id === resumeId)) {
+          throw new Error(`No resume "${resumeId}" in the Resume Library.`);
+        }
+        selection = { selectedResumeId: resumeId, suggestedModifications: [], reasoning: MANUAL_SELECTION_REASONING };
+      } else {
+        const resumeLibraryResult = await this.loadResumeLibrary(runId, tracer);
+        selection = await this.runResumeSelector(runId, report, resumeLibraryResult.resumes, tracer);
+        if (selection.selectedResumeId === NO_RESUME_IN_LIBRARY_ID) {
+          warnings.push("No resume is on file — add at least one in Admin → Resumes, then select again.");
+        }
+      }
+
+      fileStore.writeResumeSelection(runId, {
+        ...selection,
+        source: resumeId !== undefined ? "manual" : "agent",
+        selectedAt: new Date().toISOString(),
+      });
+      const updatedRun = this.commit(runId, {}, tracer.flush());
+      return { run: updatedRun, warnings };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      tracer.recordError(message);
+      this.commit(runId, {}, tracer.flush());
+      throw err;
+    } finally {
+      this.activeSteps.delete(runId);
+    }
+  }
+
   async regeneratePiece(
     runId: string,
     pieceId: string,
@@ -1464,6 +1569,29 @@ export class Orchestrator {
    * output (not full resume text) keeps the trace lean, and any per-resume
    * LLM cleanup pass is already traced separately inside ResumeLibrary.
    */
+  /** Shared by generate() (when no stored selection is usable) and selectResume(). */
+  private async runResumeSelector(
+    runId: string,
+    report: VacancyReport,
+    resumes: ResumeCandidate[],
+    tracer: Tracer
+  ): Promise<ResumeSelection> {
+    const resumeRequest = buildAgentRequest(runId, AgentName.RESUME_SELECTOR, {
+      vacancyTitle: report.vacancy.title,
+      vacancyRequirements: report.vacancy.requirements,
+      vacancyKeywords: report.vacancy.keywords,
+      missingSkills: report.fitAnalysis.missingSkills,
+      resumes,
+    });
+    const resumeResponse = await this.agents.resumeSelector.run(resumeRequest, {
+      tracer,
+      tools: { llm: this.llmProvider },
+      instructions: this.settingsRepo.getSettings().agentInstructions,
+    });
+    if (resumeResponse.status === "error") throw new Error(resumeResponse.error.message);
+    return resumeResponse.output;
+  }
+
   private async loadResumeLibrary(
     runId: string,
     tracer: Tracer
